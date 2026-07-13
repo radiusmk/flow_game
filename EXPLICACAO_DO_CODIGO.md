@@ -53,7 +53,7 @@ As regras principais sao:
 
 `PuzzleGenerator` cria os tabuleiros. Os tres primeiros niveis usam fases fixas, mais simples, para iniciar o jogador. A partir dai, os puzzles sao gerados automaticamente.
 
-A progressao de tamanho usa `GetSizeForLevel`, partindo de 5x5 e chegando ate 15x15. A quantidade de cores vem de `GetPairCountForLevel`; em niveis altos ela e limitada para evitar muitas linhas curtas e faceis.
+A progressao de tamanho usa `GetSizeForLevel`, partindo de 5x5 e chegando ate 15x15. A quantidade de cores vem de `GetPairCountForLevel`; em niveis altos ela aumenta junto com o tamanho do tabuleiro, chegando a usar mais pares para reduzir a necessidade de linhas muito longas em zig-zag.
 
 Para gerar puzzles automaticos, o codigo cria primeiro um caminho que cobre todo o tabuleiro. Esse caminho e embaralhado por uma tecnica de reconexao chamada no codigo de `TryBackbite`, que aumenta curvas e reduz o padrao obvio de serpentina. Depois esse caminho grande e dividido em varios caminhos menores, um para cada cor.
 
@@ -70,7 +70,7 @@ A tela principal fica em `MainWindow.xaml` e `MainWindow.xaml.cs`.
 
 O XAML define a estrutura visual:
 
-- painel lateral com nivel, botoes, score, dicas e status;
+- painel lateral com modo de jogo, nivel, tamanho fixo, botoes, score, dicas e status;
 - area principal com o tabuleiro;
 - botao `Ver solucao` no canto inferior direito.
 
@@ -85,6 +85,15 @@ O code-behind (`MainWindow.xaml.cs`) controla a interacao:
 
 O desenho usa um `Canvas`. Cada linha e desenhada como um `Path` com cantos retos entre centros de celulas. As bolinhas sao `Ellipse`.
 
+## Modos de jogo
+
+O jogo tem dois modos:
+
+- `Progressao`: o jogador avanca por niveis. Cada nivel pode exigir mais de um puzzle resolvido antes de liberar o proximo. As primeiras fases exigem apenas uma resolucao; conforme a dificuldade aumenta, o numero necessario cresce ate um limite.
+- `Tamanho fixo`: o jogador escolhe um tamanho de tabuleiro de 5x5 a 15x15. Ao concluir um puzzle, o jogo carrega outro puzzle do mesmo tamanho, sem mudar a dimensao do tabuleiro.
+
+As preferencias ficam em `GameSettings`. No modo progressao, `ProgressionSolvedAtCurrentLevel` registra quantos puzzles daquele nivel ja foram concluidos. `CurrentPuzzleVariant` e `FixedSizePuzzleVariant` garantem que o jogo gere um puzzle diferente ao repetir o mesmo nivel ou tamanho.
+
 ## Score e dicas
 
 Ao resolver um puzzle, o jogo calcula um bonus com base no tamanho do tabuleiro, quantidade de pares e nivel. Penalidades sao aplicadas quando o jogador:
@@ -97,7 +106,7 @@ Ao resolver um puzzle, o jogo calcula um bonus com base no tamanho do tabuleiro,
 
 As dicas usam `HintCredits`. O jogador recebe creditos iniciais e ganha novos creditos quando o score ultrapassa certos limites. O intervalo para ganhar novas dicas aumenta progressivamente, para permitir avancar sem tornar o jogo facil demais.
 
-O botao `Usar dica` chama `ApplyNextMissingSolutionPath`, que escolhe uma cor ainda nao conectada e aplica o caminho correto dessa cor. Se esse caminho cruzar linhas atuais, as linhas conflitantes sao apagadas para manter o tabuleiro valido.
+O botao `Usar dica` chama `ApplyNextMissingSolutionPath`, que escolhe uma cor ainda nao conectada e aplica o caminho correto dessa cor. Antes de inserir a dica, o tabuleiro descarta linhas atuais que nao sejam prefixos da solucao conhecida daquele mesmo par. Isso pode apagar tentativas do jogador, mas garante que a dica nao crie um estado impossivel de completar.
 
 ## Conclusao de fase
 
@@ -132,7 +141,7 @@ Ele tambem normaliza dados antigos. Por exemplo, se um arquivo salvo foi criado 
 - impossibilidade de continuar depois da bolinha final;
 - continuacao a partir da ponta solta;
 - substituicao de linha ao cruzar;
-- aplicacao de dica;
+- aplicacao de dica segura;
 - geracao valida em varios niveis;
 - maior complexidade em niveis avancados.
 

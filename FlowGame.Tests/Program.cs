@@ -17,10 +17,13 @@ internal sealed class FlowGameTestSuite
         Run(PathCanContinueFromLooseEnd);
         Run(NewLineCanReplaceExistingLine);
         Run(HintAppliesMissingValidPath);
+        Run(HintClearsPathsThatWouldBreakCanonicalSolution);
         Run(UndoRestoresPreviousPath);
         Run(LevelProgressionReachesMaximumBoard);
+        Run(ProgressionRequiresMoreSolvesOverTime);
+        Run(FixedSizeGenerationKeepsBoardSize);
         Run(GeneratedPuzzlesAreValidAcrossRange);
-        Run(AdvancedLevelsUseLongerTwistierPaths);
+        Run(AdvancedLevelsUseMoreColorsWithBalancedPathLengths);
 
         Console.WriteLine($"{_passed} tests passed.");
     }
@@ -110,6 +113,28 @@ internal sealed class FlowGameTestSuite
         Assert(board.Paths[0].SequenceEqual(puzzle.SolutionPaths[0]), "Hint should apply the stored valid solution path.");
     }
 
+    private void HintClearsPathsThatWouldBreakCanonicalSolution()
+    {
+        var puzzle = _generator.Create(4);
+        var board = new PlayerBoard(puzzle);
+        var pairToHint = puzzle.Pairs[0];
+        var incompatiblePair = puzzle.Pairs[1];
+        var incompatiblePath = puzzle.SolutionPaths[pairToHint.Id]
+            .Skip(1)
+            .Take(3)
+            .ToList();
+
+        board.Paths[incompatiblePair.Id] = incompatiblePath;
+
+        var hintedPairId = board.ApplyNextMissingSolutionPath();
+        Assert(hintedPairId == pairToHint.Id, "Hint should still choose the first missing pair.");
+        Assert(board.Paths[pairToHint.Id].SequenceEqual(puzzle.SolutionPaths[pairToHint.Id]), "Hint should apply the canonical solution path.");
+        Assert(board.Paths[incompatiblePair.Id].Count == 0, "Hint should clear paths that are incompatible with the canonical solution.");
+
+        board.ApplySolution();
+        Assert(board.IsSolved(), "After a safe hint, the canonical solution must remain reachable.");
+    }
+
     private void UndoRestoresPreviousPath()
     {
         var puzzle = _generator.Create(2);
@@ -133,6 +158,24 @@ internal sealed class FlowGameTestSuite
             previousSize = size;
         }
     }
+
+    private void ProgressionRequiresMoreSolvesOverTime()
+    {
+        Assert(_generator.GetRequiredSolvesForLevel(1) == 1, "Early levels should progress after one solve.");
+        Assert(_generator.GetRequiredSolvesForLevel(4) == 2, "Level 4 should require more solves.");
+        Assert(_generator.GetRequiredSolvesForLevel(10) == 4, "Higher levels should require several solves.");
+        Assert(_generator.GetRequiredSolvesForLevel(31) == 8, "Advanced levels should require the capped maximum.");
+    }
+
+    private void FixedSizeGenerationKeepsBoardSize()
+    {
+        for (var size = 5; size <= 15; size++)
+        {
+            var puzzle = _generator.CreateFixedSize(size, 3);
+            Assert(puzzle.Size == size, "Fixed-size mode must keep the selected board size.");
+        }
+    }
+
 
     private void GeneratedPuzzlesAreValidAcrossRange()
     {
@@ -167,15 +210,15 @@ internal sealed class FlowGameTestSuite
         }
     }
 
-    private void AdvancedLevelsUseLongerTwistierPaths()
+    private void AdvancedLevelsUseMoreColorsWithBalancedPathLengths()
     {
         var puzzle = _generator.Create(31);
         var averageLength = puzzle.SolutionPaths.Values.Average(path => path.Count);
         var totalTurns = puzzle.SolutionPaths.Values.Sum(CountTurns);
 
         Assert(puzzle.Size == 15, "Level 31 should use the largest board.");
-        Assert(puzzle.Pairs.Count <= 11, "Advanced boards should avoid too many short, easy paths.");
-        Assert(averageLength >= 18, "Advanced boards should require longer connections.");
+        Assert(puzzle.Pairs.Count >= 14, "Advanced boards should use more colors to avoid excessive zig-zag paths.");
+        Assert(averageLength is >= 12 and <= 17, "Advanced paths should be substantial without becoming too long.");
         Assert(totalTurns >= 45, "Advanced boards should include many bends across the solution.");
     }
 

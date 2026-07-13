@@ -39,6 +39,10 @@ public sealed class SettingsStore
     {
         settings.SelectedStartLevel = Math.Max(1, settings.SelectedStartLevel);
         settings.LastUnlockedLevel = Math.Max(1, settings.LastUnlockedLevel);
+        settings.FixedBoardSize = Math.Clamp(settings.FixedBoardSize, 5, 15);
+        settings.ProgressionSolvedAtCurrentLevel = Math.Max(0, settings.ProgressionSolvedAtCurrentLevel);
+        settings.CurrentPuzzleVariant = Math.Max(0, settings.CurrentPuzzleVariant);
+        settings.FixedSizePuzzleVariant = Math.Max(0, settings.FixedSizePuzzleVariant);
         settings.HintCredits = Math.Max(0, settings.HintCredits);
         settings.NextHintCreditScore = Math.Max(2500, settings.NextHintCreditScore);
         var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
@@ -49,6 +53,10 @@ public sealed class SettingsStore
     {
         settings.SelectedStartLevel = Math.Max(1, settings.SelectedStartLevel);
         settings.LastUnlockedLevel = Math.Max(1, settings.LastUnlockedLevel);
+        settings.FixedBoardSize = Math.Clamp(settings.FixedBoardSize, 5, 15);
+        settings.ProgressionSolvedAtCurrentLevel = Math.Max(0, settings.ProgressionSolvedAtCurrentLevel);
+        settings.CurrentPuzzleVariant = Math.Max(0, settings.CurrentPuzzleVariant);
+        settings.FixedSizePuzzleVariant = Math.Max(0, settings.FixedSizePuzzleVariant);
 
         if (settings.HintCredits == 0 && settings.NextHintCreditScore == 0 && settings.HintCreditsEarned == 0)
         {

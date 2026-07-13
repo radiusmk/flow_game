@@ -19,16 +19,27 @@ public partial class MainWindow : Window
     private bool _isDrawing;
     private bool _isInitializing = true;
     private bool _isCompletingLevel;
+    private bool _isUpdatingControls;
     private CellPosition? _lastPenalizedInvalidCell;
 
     public MainWindow()
     {
         InitializeComponent();
         _settings = _settingsStore.Load();
+        PopulateModes();
         PopulateStartLevels();
+        PopulateFixedSizes();
+        ModeCombo.SelectedItem = GetModeLabel(_settings.Mode);
         StartLevelCombo.SelectedItem = Math.Clamp(_settings.SelectedStartLevel, 1, 31);
+        FixedSizeCombo.SelectedItem = Math.Clamp(_settings.FixedBoardSize, 5, 15);
         _isInitializing = false;
-        LoadLevel(_settings.SelectedStartLevel);
+        LoadCurrentPuzzle();
+    }
+
+    private void PopulateModes()
+    {
+        ModeCombo.Items.Add(GetModeLabel(GameMode.Progression));
+        ModeCombo.Items.Add(GetModeLabel(GameMode.FixedSize));
     }
 
     private void PopulateStartLevels()
@@ -39,10 +50,45 @@ public partial class MainWindow : Window
         }
     }
 
+    private void PopulateFixedSizes()
+    {
+        for (var size = 5; size <= 15; size++)
+        {
+            FixedSizeCombo.Items.Add(size);
+        }
+    }
+
+    private void LoadCurrentPuzzle()
+    {
+        if (_settings.Mode == GameMode.FixedSize)
+        {
+            LoadFixedSizePuzzle();
+        }
+        else
+        {
+            LoadLevel(_settings.SelectedStartLevel);
+        }
+    }
+
     private void LoadLevel(int level)
     {
         _currentLevel = Math.Max(1, level);
-        _board = new PlayerBoard(_generator.Create(_currentLevel));
+        _settings.SelectedStartLevel = _currentLevel;
+        _board = new PlayerBoard(_generator.Create(_currentLevel, _settings.CurrentPuzzleVariant));
+        _activePairId = null;
+        _isDrawing = false;
+        _isCompletingLevel = false;
+        _lastPenalizedInvalidCell = null;
+        ConfigureBrushes();
+        UpdateHud("Puzzle pronto.");
+        DrawBoard();
+    }
+
+    private void LoadFixedSizePuzzle()
+    {
+        var size = Math.Clamp(_settings.FixedBoardSize, 5, 15);
+        _currentLevel = 1 + (size - 5) * 3;
+        _board = new PlayerBoard(_generator.CreateFixedSize(size, _settings.FixedSizePuzzleVariant));
         _activePairId = null;
         _isDrawing = false;
         _isCompletingLevel = false;
@@ -292,22 +338,24 @@ public partial class MainWindow : Window
 
         _isCompletingLevel = true;
         var completedLevel = _currentLevel;
-        var nextLevel = _currentLevel + 1;
         var bonus = GetSolveBonus(_board.Puzzle);
         ApplyScoreDelta(bonus);
         _settings.PuzzlesSolved++;
-        _settings.LastUnlockedLevel = Math.Max(_settings.LastUnlockedLevel, nextLevel);
+        var nextDescription = AdvanceAfterSolve();
         _settingsStore.Save(_settings);
         UpdateHud($"Nivel {completedLevel} concluido. +{bonus} pontos.");
 
-        var completionWindow = new LevelCompleteWindow(completedLevel, bonus, _settings.Score, nextLevel)
+        var completedDescription = _settings.Mode == GameMode.FixedSize
+            ? $"Voce concluiu um tabuleiro {_settings.FixedBoardSize}x{_settings.FixedBoardSize}."
+            : $"Voce concluiu o nivel {completedLevel}.";
+        var completionWindow = new LevelCompleteWindow(completedDescription, bonus, _settings.Score, nextDescription)
         {
             Owner = this
         };
         completionWindow.ShowDialog();
 
-        LoadLevel(nextLevel);
-        UpdateHud($"Nivel {nextLevel} carregado.");
+        LoadCurrentPuzzle();
+        UpdateHud(GetCurrentProgressStatus());
     }
 
     private void UpdateHud(string status)
@@ -319,7 +367,7 @@ public partial class MainWindow : Window
 
         LevelText.Text = $"Nivel {_currentLevel}";
         SizeText.Text = $"Tabuleiro {_board.Puzzle.Size}x{_board.Puzzle.Size} | {_board.Puzzle.Pairs.Count} cores";
-        SolvedText.Text = $"Resolvidos: {_settings.PuzzlesSolved}";
+        SolvedText.Text = GetProgressText();
         ScoreText.Text = $"Score: {_settings.Score}";
         CreditsText.Text = $"Dicas: {_settings.HintCredits}";
         StatusText.Text = status;
@@ -327,11 +375,21 @@ public partial class MainWindow : Window
 
     private void NewGame_Click(object sender, RoutedEventArgs e)
     {
-        var level = StartLevelCombo.SelectedItem is int selected ? selected : 1;
-        _settings.SelectedStartLevel = level;
-        _settings.LastUnlockedLevel = Math.Max(_settings.LastUnlockedLevel, level);
+        if (_settings.Mode == GameMode.FixedSize)
+        {
+            _settings.FixedSizePuzzleVariant++;
+        }
+        else
+        {
+            var level = StartLevelCombo.SelectedItem is int selected ? selected : 1;
+            _settings.SelectedStartLevel = level;
+            _settings.CurrentPuzzleVariant = 0;
+            _settings.ProgressionSolvedAtCurrentLevel = 0;
+            _settings.LastUnlockedLevel = Math.Max(_settings.LastUnlockedLevel, level);
+        }
+
         _settingsStore.Save(_settings);
-        LoadLevel(level);
+        LoadCurrentPuzzle();
     }
 
     private void Reset_Click(object sender, RoutedEventArgs e)
@@ -404,16 +462,68 @@ public partial class MainWindow : Window
 
     private void StartLevelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isUpdatingControls)
+        {
+            return;
+        }
+
         if (StartLevelCombo.SelectedItem is int selected)
         {
             _settings.SelectedStartLevel = selected;
+            _settings.CurrentPuzzleVariant = 0;
+            _settings.ProgressionSolvedAtCurrentLevel = 0;
             _settings.LastUnlockedLevel = Math.Max(_settings.LastUnlockedLevel, selected);
             _settingsStore.Save(_settings);
 
-            if (!_isInitializing)
+            if (!_isInitializing && _settings.Mode == GameMode.Progression)
             {
                 LoadLevel(selected);
                 UpdateHud($"Nivel {selected} carregado.");
+            }
+        }
+    }
+
+    private void ModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingControls)
+        {
+            return;
+        }
+
+        if (ModeCombo.SelectedItem is not string selected)
+        {
+            return;
+        }
+
+        _settings.Mode = selected == GetModeLabel(GameMode.FixedSize)
+            ? GameMode.FixedSize
+            : GameMode.Progression;
+        _settingsStore.Save(_settings);
+
+        if (!_isInitializing)
+        {
+            LoadCurrentPuzzle();
+            UpdateHud(_settings.Mode == GameMode.FixedSize ? "Modo tamanho fixo carregado." : "Modo progressao carregado.");
+        }
+    }
+
+    private void FixedSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingControls)
+        {
+            return;
+        }
+
+        if (FixedSizeCombo.SelectedItem is int selected)
+        {
+            _settings.FixedBoardSize = selected;
+            _settings.FixedSizePuzzleVariant = 0;
+            _settingsStore.Save(_settings);
+
+            if (!_isInitializing && _settings.Mode == GameMode.FixedSize)
+            {
+                LoadFixedSizePuzzle();
+                UpdateHud($"Tamanho fixo {selected}x{selected} carregado.");
             }
         }
     }
@@ -482,5 +592,62 @@ public partial class MainWindow : Window
     private static int GetNextHintCreditStep(int creditsEarned)
     {
         return 2500 + Math.Min(creditsEarned, 8) * 750;
+    }
+
+    private string AdvanceAfterSolve()
+    {
+        if (_settings.Mode == GameMode.FixedSize)
+        {
+            _settings.FixedSizePuzzleVariant++;
+            return $"Proximo puzzle: {_settings.FixedBoardSize}x{_settings.FixedBoardSize}";
+        }
+
+        var required = _generator.GetRequiredSolvesForLevel(_currentLevel);
+        _settings.ProgressionSolvedAtCurrentLevel++;
+
+        if (_settings.ProgressionSolvedAtCurrentLevel >= required)
+        {
+            _settings.SelectedStartLevel = _currentLevel + 1;
+            _settings.CurrentPuzzleVariant = 0;
+            _settings.ProgressionSolvedAtCurrentLevel = 0;
+            _settings.LastUnlockedLevel = Math.Max(_settings.LastUnlockedLevel, _settings.SelectedStartLevel);
+            _isUpdatingControls = true;
+            StartLevelCombo.SelectedItem = Math.Clamp(_settings.SelectedStartLevel, 1, 31);
+            _isUpdatingControls = false;
+            return $"Proximo nivel: {_settings.SelectedStartLevel}";
+        }
+
+        _settings.CurrentPuzzleVariant++;
+        var remaining = required - _settings.ProgressionSolvedAtCurrentLevel;
+        return remaining == 1
+            ? $"Mais 1 puzzle no nivel {_currentLevel}"
+            : $"Mais {remaining} puzzles no nivel {_currentLevel}";
+    }
+
+    private string GetProgressText()
+    {
+        if (_settings.Mode == GameMode.FixedSize)
+        {
+            return $"Resolvidos: {_settings.PuzzlesSolved} | Fixo {_settings.FixedBoardSize}x{_settings.FixedBoardSize}";
+        }
+
+        var required = _generator.GetRequiredSolvesForLevel(_currentLevel);
+        return $"Resolvidos: {_settings.PuzzlesSolved} | Nivel: {_settings.ProgressionSolvedAtCurrentLevel}/{required}";
+    }
+
+    private string GetCurrentProgressStatus()
+    {
+        if (_settings.Mode == GameMode.FixedSize)
+        {
+            return $"Novo puzzle {_settings.FixedBoardSize}x{_settings.FixedBoardSize} carregado.";
+        }
+
+        var required = _generator.GetRequiredSolvesForLevel(_currentLevel);
+        return $"Nivel {_currentLevel} carregado. Progresso {Math.Min(_settings.ProgressionSolvedAtCurrentLevel, required)}/{required}.";
+    }
+
+    private static string GetModeLabel(GameMode mode)
+    {
+        return mode == GameMode.FixedSize ? "Tamanho fixo" : "Progressao";
     }
 }

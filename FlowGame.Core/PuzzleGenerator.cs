@@ -9,15 +9,43 @@ public sealed class PuzzleGenerator
         "#00897B", "#C0CA33", "#6D4C41", "#3949AB", "#F4511E"
     ];
 
-    public PuzzleDefinition Create(int level)
+    public PuzzleDefinition Create(int level, int variant = 0)
+    {
+        level = Math.Max(1, level);
+        if (variant == 0)
+        {
+            return level switch
+            {
+                1 => CreateFromSolution(1, 5, FixedLevelOne()),
+                2 => CreateFromSolution(2, 5, FixedLevelTwo()),
+                3 => CreateFromSolution(3, 6, FixedLevelThree()),
+                _ => CreateGenerated(level, variant)
+            };
+        }
+
+        return CreateGenerated(level, variant);
+    }
+
+    public PuzzleDefinition CreateFixedSize(int size, int variant)
+    {
+        size = Math.Clamp(size, PuzzleDefinition.MinSize, PuzzleDefinition.MaxSize);
+        var effectiveLevel = 1 + (size - PuzzleDefinition.MinSize) * 3 + Math.Max(0, variant / 2);
+        return CreateGenerated(effectiveLevel, variant, size);
+    }
+
+    public int GetRequiredSolvesForLevel(int level)
     {
         level = Math.Max(1, level);
         return level switch
         {
-            1 => CreateFromSolution(1, 5, FixedLevelOne()),
-            2 => CreateFromSolution(2, 5, FixedLevelTwo()),
-            3 => CreateFromSolution(3, 6, FixedLevelThree()),
-            _ => CreateGenerated(level)
+            <= 3 => 1,
+            <= 6 => 2,
+            <= 9 => 3,
+            <= 12 => 4,
+            <= 18 => 5,
+            <= 24 => 6,
+            <= 30 => 7,
+            _ => 8
         };
     }
 
@@ -28,17 +56,18 @@ public sealed class PuzzleGenerator
 
     public int GetPairCountForLevel(int level, int size)
     {
-        var baseCount = 4 + level / 5 + size / 4;
-        var maximum = Math.Clamp(size - 3, 5, 11);
+        var baseCount = 3 + level / 4 + size / 2;
+        var maximum = Math.Clamp(size, 5, Palette.Length);
         return Math.Clamp(baseCount, 4, maximum);
     }
 
-    private PuzzleDefinition CreateGenerated(int level)
+    private PuzzleDefinition CreateGenerated(int level, int variant, int? fixedSize = null)
     {
-        var size = GetSizeForLevel(level);
+        var size = fixedSize ?? GetSizeForLevel(level);
         var pairCount = GetPairCountForLevel(level, size);
-        var cells = BuildComplexHamiltonianCells(size, level);
-        var lengths = SplitLengths(cells.Length, pairCount, level);
+        var seed = level * 101 + variant * 997;
+        var cells = BuildComplexHamiltonianCells(size, seed);
+        var lengths = SplitLengths(cells.Length, pairCount, seed);
         var paths = new Dictionary<int, IReadOnlyList<CellPosition>>();
         var cursor = 0;
 

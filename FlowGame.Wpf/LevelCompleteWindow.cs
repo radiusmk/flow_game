@@ -7,7 +7,7 @@ namespace FlowGame.Wpf;
 
 public sealed class LevelCompleteWindow : Window
 {
-    public LevelCompleteWindow(int level, int bonus, int score, int nextLevel)
+    public LevelCompleteWindow(string completedDescription, int bonus, int score, string nextDescription)
     {
         Title = "Nivel concluido";
         Width = 420;
@@ -33,7 +33,7 @@ public sealed class LevelCompleteWindow : Window
         });
         panel.Children.Add(new TextBlock
         {
-            Text = $"Voce concluiu o nivel {level}.",
+            Text = completedDescription,
             FontSize = 18,
             Margin = new Thickness(0, 0, 0, 8)
         });
@@ -46,7 +46,7 @@ public sealed class LevelCompleteWindow : Window
         });
         panel.Children.Add(new TextBlock
         {
-            Text = $"Proximo nivel: {nextLevel}",
+            Text = nextDescription,
             FontSize = 15,
             Foreground = new SolidColorBrush(Color.FromRgb(170, 183, 193)),
             Margin = new Thickness(0, 0, 0, 22)

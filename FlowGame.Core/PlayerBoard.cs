@@ -221,18 +221,9 @@ public sealed class PlayerBoard
         }
 
         SaveHistory();
-        var solution = Puzzle.SolutionPaths[pair.Id].ToList();
-        var solutionCells = solution.ToHashSet();
+        KeepOnlySolutionCompatiblePaths();
 
-        foreach (var otherPair in Puzzle.Pairs.Where(otherPair => otherPair.Id != pair.Id))
-        {
-            if (Paths[otherPair.Id].Any(solutionCells.Contains))
-            {
-                Paths[otherPair.Id] = new List<CellPosition>();
-            }
-        }
-
-        Paths[pair.Id] = solution;
+        Paths[pair.Id] = Puzzle.SolutionPaths[pair.Id].ToList();
         return pair.Id;
     }
 
@@ -249,5 +240,64 @@ public sealed class PlayerBoard
         _history.Push(Paths.ToDictionary(
             item => item.Key,
             item => item.Value.ToList()));
+    }
+
+    private void KeepOnlySolutionCompatiblePaths()
+    {
+        foreach (var pair in Puzzle.Pairs)
+        {
+            if (!IsPathCompatibleWithSolution(pair.Id))
+            {
+                Paths[pair.Id] = new List<CellPosition>();
+            }
+        }
+    }
+
+    private bool IsPathCompatibleWithSolution(int pairId)
+    {
+        var path = Paths[pairId];
+        if (path.Count == 0)
+        {
+            return true;
+        }
+
+        var solution = Puzzle.SolutionPaths[pairId];
+        return IsPrefixOf(path, solution) || IsPrefixOfReverse(path, solution);
+    }
+
+    private static bool IsPrefixOf(IReadOnlyList<CellPosition> path, IReadOnlyList<CellPosition> solution)
+    {
+        if (path.Count > solution.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < path.Count; i++)
+        {
+            if (path[i] != solution[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPrefixOfReverse(IReadOnlyList<CellPosition> path, IReadOnlyList<CellPosition> solution)
+    {
+        if (path.Count > solution.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < path.Count; i++)
+        {
+            if (path[i] != solution[solution.Count - 1 - i])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
