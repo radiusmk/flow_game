@@ -30,8 +30,33 @@ Depois abra:
 dotnet run --project .\FlowGame.Tests\FlowGame.Tests.csproj
 ```
 
+Testes Android unitários, a partir de uma máquina com Android Studio, JDK e SDK Android:
+
+```powershell
+gradle :FlowGame.Android:testDebugUnitTest
+```
+
+Build de APK local para Android:
+
+```powershell
+gradle :FlowGame.Android:assembleDebug
+```
+
+O APK de debug será gerado em:
+
+```powershell
+.\FlowGame.Android\build\outputs\apk\debug\FlowGame.Android-debug.apk
+```
+
+Para testes instrumentados em emulador ou aparelho conectado:
+
+```powershell
+gradle :FlowGame.Android:connectedDebugAndroidTest
+```
+
 ## Estrutura
 
 - `FlowGame.Core`: regras, tabuleiro, progresso de caminhos e geracao de puzzles.
 - `FlowGame.Wpf`: interface Windows 2D.
+- `FlowGame.Android`: interface Android nativa em Kotlin/Jetpack Compose.
 - `FlowGame.Tests`: verificador de regras sem dependencias externas.

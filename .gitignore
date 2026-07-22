@@ -3,3 +3,6 @@ obj/
 publish/
 .vs/
 *.user
+.gradle/
+local.properties
+FlowGame.Android/build/
